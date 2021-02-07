@@ -4,6 +4,6 @@
 #
 
 gcc -g3 main.c -o curses_timer -lncurses
-if test ! -e /opt/laser.wav; then
-  sudo cp sounds/laser.wav /opt
+if test ! -e /opt/curve.wav; then
+  sudo cp sounds/curve.wav /opt
 fi

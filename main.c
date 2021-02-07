@@ -10,7 +10,22 @@ Ncurses library used
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/time.h>
+#include <time.h>
 #define _name "curses_timer"
+
+static char ctime_buf[16];
+
+static void
+get_currenttime()
+{
+  struct timeval tval;
+  struct tm *ptm;
+
+  gettimeofday(&tval, NULL);
+  ptm = localtime(&tval.tv_sec);
+  strftime(ctime_buf, sizeof(ctime_buf), "%H:%M:%S", ptm);
+}
 
 int main(int argc, char *argv[])
 {
@@ -32,6 +47,7 @@ int main(int argc, char *argv[])
     getmaxyx(stdscr, row, col);
     nodelay(stdscr, TRUE); // getch not stop program
     keypad(stdscr, TRUE);  // F1..2..3
+    get_currenttime();
 
     while (1) {
       if ((ch = getch()) == -1) {
@@ -54,6 +70,8 @@ int main(int argc, char *argv[])
             mvprintw(0, 0, "Key press S - stop timer");
             mvprintw(1, 0, "Key press C - continue timer");
             mvprintw(2, 0, "Key press F10 - exit");
+            mvprintw(4, 0, "Start time - %s", ctime_buf);
+            mvprintw(5, 0, "Timer time - %s", argv[1]);
             refresh();
             sleep(1);
           } else {
@@ -63,7 +81,7 @@ int main(int argc, char *argv[])
                 exit(EXIT_FAILURE);
               case 0:
                 close(2);
-                execl("/usr/bin/aplay", "/usr/bin/aplay", "/opt/laser.wav", NULL);
+                execl("/usr/bin/aplay", "/usr/bin/aplay", "/opt/curve.wav", NULL);
               default:
                 wait(&status);
             }
@@ -93,6 +111,7 @@ int main(int argc, char *argv[])
     }
   }
 
+  printf("Start time - %s\n", ctime_buf);
   printf("Timer done - %s\n", timer_buf);
   return 0;
 }
