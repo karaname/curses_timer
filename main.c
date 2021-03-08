@@ -30,7 +30,7 @@ get_currenttime()
 int main(int argc, char *argv[])
 {
   char timer_buf[15];
-  int row, col, ch, status;
+  int ch, status;
   int min = 0;
   int sec = 0;
   int hour = 0;
@@ -44,7 +44,6 @@ int main(int argc, char *argv[])
     initscr();
     noecho();
     curs_set(0);
-    getmaxyx(stdscr, row, col);
     nodelay(stdscr, TRUE); // getch not stop program
     keypad(stdscr, TRUE);  // F1..2..3
     get_currenttime();
@@ -66,7 +65,7 @@ int main(int argc, char *argv[])
             }
 
             sprintf(timer_buf, "%02d:%02d:%02d", hour, min, sec);
-            mvprintw(row / 2, (col - strlen(timer_buf)) / 2, "%s", timer_buf);
+            mvprintw(LINES / 2, (COLS - strlen(timer_buf)) / 2, "%s", timer_buf);
             mvprintw(0, 0, "Key press S - stop timer");
             mvprintw(1, 0, "Key press C - continue timer");
             mvprintw(2, 0, "Key press F10 - exit");
