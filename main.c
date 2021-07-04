@@ -1,8 +1,3 @@
-/*
-Timer with signal, play 'sounds/curve.wav'
-Input values: time format 00:00:00
-*/
-
 #include <ncurses.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,134 +7,123 @@ Input values: time format 00:00:00
 #include <sys/time.h>
 #include <time.h>
 #include <setjmp.h>
-#define _name "curses_timer"
+#include <error.h>
 
-char ctime_buf[16];
 sigjmp_buf env_buf;
-
-void resize_handler()
+void sigwinch_handler()
 {
-  siglongjmp(env_buf, 5);
+  siglongjmp(env_buf, 1);
 }
 
-/* check 80x24 terminal size */
-void term_size_check()
+void error_wrap(const char *s)
 {
-  if (LINES < 24 || COLS < 80) {
-    endwin();
-    fprintf(stderr, "%s: Please, use the 'normal' terminal \
-size - 80 columns by 24 lines\n", _name);
-    exit(0);
-  }
+  endwin();
+  error(0, 0, s);
+  exit(EXIT_FAILURE);
 }
 
-void get_currenttime()
+void get_curtime(char *t, size_t max)
 {
   struct timeval tval;
   struct tm *ptm;
 
   gettimeofday(&tval, NULL);
   ptm = localtime(&tval.tv_sec);
-  strftime(ctime_buf, sizeof(ctime_buf), "%H:%M:%S", ptm);
+  strftime(t, max, "%H:%M:%S", ptm);
 }
 
 int main(int argc, char *argv[])
 {
-  signal(SIGWINCH, resize_handler);
+  signal(SIGWINCH, sigwinch_handler);
+  signal(SIGINT, SIG_IGN);
 
-  char timer_buf[15];
-  int ch, ach, status;
-  int min = 0;
-  int sec = 0;
-  int hour = 0;
+  char str_time[16], cur_time[16], end_time[16];
+  int ch, cch, status, min = 0, sec = 0, hour = 0;
 
   if (argc > 1) {
     if (strlen(argv[1]) != 8) {
-      fprintf(stderr, "%s: Timer parameter should be in format '00:00:00'\n", _name);
-      exit(1);
+      error(0, 0, "Timer parameter should be in format '00:00:00'");
+      exit(EXIT_FAILURE);
     }
 
-    initscr();
+    if (sigsetjmp(env_buf, 1)) {
+      endwin();
+      clear();
+    }
+
+    if (!initscr()) {
+      error(0, 0, "Error initialising ncurses");
+      exit(EXIT_FAILURE);
+    }
+
     noecho();
     curs_set(0);
-    nodelay(stdscr, TRUE); // getch not stop program
-    keypad(stdscr, TRUE);  // F1..2..3
-    get_currenttime();
+    nodelay(stdscr, TRUE);
+    keypad(stdscr, TRUE);
+    get_curtime(cur_time, sizeof(cur_time));
 
-    while (1) {
-      if (sigsetjmp(env_buf, 5)) {
-        endwin();
-        clear();
+    while ((ch = getch())) {
+      switch (ch) {
+        case KEY_F(10):
+          endwin();
+          exit(EXIT_SUCCESS);
+        case 's':
+          while ((cch = getch()))
+            if (cch == 'c')
+              break;
       }
-      term_size_check();
 
-      if ((ch = getch()) == -1) {
-        if (strcmp(timer_buf, argv[1]) != 0) {
-          sec++;
-          if (sec == 60) {
-            sec = 0;
-            min++;
-            if (min == 60) {
-              min = 0;
-              hour++;
-              if (hour == 24) {
-                hour = 0;
-              }
-            }
+      if (strcmp(str_time, argv[1]) != 0) {
+        if (sec == 60) {
+          sec = 0;
+          min++;
+          if (min == 60) {
+            min = 0;
+            hour++;
+            if (hour == 24)
+              hour = 0;
           }
-
-          sprintf(timer_buf, "%02d:%02d:%02d", hour, min, sec);
-          mvprintw(LINES / 2, (COLS - strlen(timer_buf)) / 2, "%s", timer_buf);
-          mvprintw(0, 0, "Key press S - stop timer");
-          mvprintw(1, 0, "Key press C - continue timer");
-          mvprintw(2, 0, "Key press F10 - exit");
-          mvprintw(4, 0, "Start time - %s", ctime_buf);
-          mvprintw(5, 0, "Timer time - %s", argv[1]);
-          refresh();
-          sleep(1);
-        } else {
-          pid_t aplay_child;
-          switch (aplay_child = fork()) {
-            case -1:
-              exit(EXIT_FAILURE);
-            case 0:
-              close(2);
-              execl("/usr/bin/aplay", "/usr/bin/aplay", "sounds/curve.wav", NULL);
-            default:
-              wait(&status);
-          }
-
-          break;
         }
-      } else if (ch == 's') {
-        while (ach = getch()) {
-          if (ach == 'c') {
+
+        sprintf(str_time, "%02d:%02d:%02d", hour, min, sec);
+        mvprintw(LINES / 2, (COLS - strlen(str_time)) / 2, "%s", str_time);
+        mvprintw(0, 0, "Key press S - stop timer");
+        mvprintw(1, 0, "Key press C - continue timer");
+        mvprintw(2, 0, "Key press F10 - exit");
+        mvprintw(4, 0, "Start time - %s", cur_time);
+        mvprintw(5, 0, "Timer time - %s", argv[1]);
+        refresh();
+        sleep(1);
+        sec++;
+      } else {
+        get_curtime(end_time, sizeof(end_time));
+        pid_t aplay_child;
+        switch (aplay_child = fork()) {
+          case -1:
+            error_wrap("fork() return -1");
             break;
-          }
+          case 0:
+            close(2);
+            execlp("aplay", "aplay", "sounds/curve.wav", NULL);
+            break;
+          default:
+            wait(&status);
+            if (WIFEXITED(status) > 0) {
+              if (WEXITSTATUS(status) != 0)
+                error_wrap("'aplay' can't play sounds/curve.wav");
+            }
         }
-      } else if (ch == KEY_F(10)) {
         break;
-        exit(0);
       }
     }
-
     endwin();
+    printf("Start timer - %s\n", cur_time);
+    printf("Timer time  - %s\n", argv[1]);
+    printf("End timer   - %s\n", end_time);
   } else {
-    fprintf(stderr, "%s: Missing timer parameter in format '00:00:00'\n", _name);
-    exit(1);
+    error(0, 0, "Missing timer parameter in format '00:00:00'");
+    exit(EXIT_FAILURE);
   }
 
-  if (WIFEXITED(status) > 0) {
-    if (WEXITSTATUS(status) != 0) {
-      fprintf(stderr, "%s: execl error, 'aplay' can't play sounds/curve.wav file\n", _name);
-      exit(1);
-    }
-  }
-
-  printf("Start timer - %s\n", ctime_buf);
-  printf("Timer time  - %s\n", timer_buf);
-  get_currenttime();
-  printf("End timer   - %s\n", ctime_buf);
-
-  return 0;
+  return EXIT_SUCCESS;
 }

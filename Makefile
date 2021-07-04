@@ -1,2 +1,2 @@
-curses_timer: main.c
-	gcc -g3 main.c -o curses_timer -lncurses
+stime: main.c
+	gcc -g3 -O0 -Wall -Wextra main.c -o stime -lncurses
